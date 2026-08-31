@@ -31,6 +31,17 @@ export function safeMcpAppDiagnosticMessage(cause: unknown, fallback: string): s
     .slice(0, 500)
 }
 
+/**
+ * Plain-language next step for a diagnostic, keyed on its cause code. Returns
+ * null when the technical message already carries the whole story.
+ */
+export function mcpAppDiagnosticGuidance(diagnostic: Pick<McpAppDiagnostic, "causeCode">): string | null {
+  if (diagnostic.causeCode === "server_unavailable" || diagnostic.causeCode === "mcp_unreachable") {
+    return "The connection that produced this view was not ready. This is usually temporary — retry, or check the connection under Settings > Library."
+  }
+  return null
+}
+
 export function formatMcpAppDiagnostic(diagnostic: McpAppDiagnostic): string {
   const document = diagnostic.sandboxDocument
   return [

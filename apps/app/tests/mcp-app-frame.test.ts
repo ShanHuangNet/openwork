@@ -6,11 +6,17 @@ import {
   OpenworkServerError,
   type OpenworkMcpAppResource,
 } from "../src/app/lib/openwork-server"
-import { formatMcpAppDiagnostic, safeMcpAppDiagnosticMessage } from "../src/components/chat/mcp-app-diagnostics"
+import {
+  formatMcpAppDiagnostic,
+  mcpAppDiagnosticGuidance,
+  safeMcpAppDiagnosticMessage,
+} from "../src/components/chat/mcp-app-diagnostics"
 import {
   buildMcpAppCsp,
   gatewayMcpAppLaunch,
   isActionableMcpAppResolutionError,
+  MCP_APP_RESOLUTION_RETRY_DELAYS_MS,
+  mcpAppResolutionRetryDelayMs,
   secureMcpAppHtml,
 } from "../src/components/chat/mcp-app-frame"
 
@@ -84,6 +90,27 @@ describe("MCP App iframe policy", () => {
     expect(isActionableMcpAppResolutionError(new OpenworkServerError(503, "mcp_unreachable", "offline"))).toBe(false)
     expect(isActionableMcpAppResolutionError(new OpenworkServerError(404, "resource_read_failed", "missing"))).toBe(true)
     expect(isActionableMcpAppResolutionError(new Error("generic failure"))).toBe(false)
+  })
+
+  test("retries only transient resolution failures within the backoff budget", () => {
+    const unavailable = new OpenworkServerError(404, "server_unavailable", "connection still loading")
+    const unreachable = new OpenworkServerError(503, "mcp_unreachable", "offline")
+    expect(mcpAppResolutionRetryDelayMs(unavailable, 0)).toBe(MCP_APP_RESOLUTION_RETRY_DELAYS_MS[0] ?? null)
+    expect(mcpAppResolutionRetryDelayMs(unavailable, 1)).toBe(MCP_APP_RESOLUTION_RETRY_DELAYS_MS[1] ?? null)
+    expect(mcpAppResolutionRetryDelayMs(unavailable, MCP_APP_RESOLUTION_RETRY_DELAYS_MS.length)).toBeNull()
+    expect(mcpAppResolutionRetryDelayMs(unreachable, 0)).toBe(MCP_APP_RESOLUTION_RETRY_DELAYS_MS[0] ?? null)
+    // Deterministic failures never burn retry budget: retrying a policy deny
+    // or a mismatched resource cannot change the outcome.
+    expect(mcpAppResolutionRetryDelayMs(new OpenworkServerError(422, "tool_denied", "denied"), 0)).toBeNull()
+    expect(mcpAppResolutionRetryDelayMs(new OpenworkServerError(422, "tool_resource_mismatch", "moved"), 0)).toBeNull()
+    expect(mcpAppResolutionRetryDelayMs(new Error("generic failure"), 0)).toBeNull()
+  })
+
+  test("explains transient connection failures in plain language", () => {
+    expect(mcpAppDiagnosticGuidance({ causeCode: "server_unavailable" })).toContain("usually temporary")
+    expect(mcpAppDiagnosticGuidance({ causeCode: "mcp_unreachable" })).toContain("usually temporary")
+    expect(mcpAppDiagnosticGuidance({ causeCode: "tool_denied" })).toBeNull()
+    expect(mcpAppDiagnosticGuidance({})).toBeNull()
   })
 
   test("formats safe, copyable handshake diagnostics", () => {
