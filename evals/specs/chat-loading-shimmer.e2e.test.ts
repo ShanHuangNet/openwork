@@ -45,6 +45,100 @@ test.skipIf(!enabled)(title, async ({ evidence }) => {
     true,
   );
 
+  // The sweep animates `background-position`, which Chromium paints on the
+  // main thread. Sample the animated value once per frame for a second: a
+  // smooth sweep changes on (almost) every frame, a stepped one changes on a
+  // bounded number of them while still visibly moving.
+  const cadence = await evalIn(app, `(async () => {
+    const shimmer = document.querySelector('[data-loading-message="working"] .ow-text-shimmer');
+    if (!(shimmer instanceof HTMLElement)) return null;
+    const positions = new Set();
+    let sampledFrames = 0;
+    const startedAt = performance.now();
+    await new Promise((resolve) => {
+      const sample = (now) => {
+        positions.add(getComputedStyle(shimmer).backgroundPosition);
+        sampledFrames += 1;
+        if (now - startedAt >= 1000) resolve(undefined);
+        else requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    return {
+      animationName: getComputedStyle(shimmer).animationName,
+      sampledFrames,
+      distinctPositions: positions.size,
+    };
+  })()`, { awaitPromise: true, timeoutMs: 15_000 });
+  if (
+    !cadence
+    || typeof cadence !== "object"
+    || !("animationName" in cadence)
+    || !("sampledFrames" in cadence)
+    || !("distinctPositions" in cadence)
+    || typeof cadence.animationName !== "string"
+    || typeof cadence.sampledFrames !== "number"
+    || typeof cadence.distinctPositions !== "number"
+  ) {
+    throw new Error(`Shimmer cadence was not readable: ${JSON.stringify(cadence)}`);
+  }
+  expect(cadence.animationName).toBe("ow-text-shimmer");
+  expect(cadence.sampledFrames).toBeGreaterThanOrEqual(30);
+  expect(cadence.distinctPositions).toBeGreaterThanOrEqual(2);
+  expect(cadence.distinctPositions).toBeLessThanOrEqual(24);
+  expect(cadence.distinctPositions).toBeLessThan(cadence.sampledFrames * 0.6);
+  evidence.recordAssertionEvidence(
+    "The Working shimmer keeps sweeping but repaints on a bounded cadence instead of every frame",
+    `Over ${cadence.sampledFrames} sampled frames the animated position took ${cadence.distinctPositions} distinct values while “${cadence.animationName}” stayed active.`,
+    true,
+  );
+
+  // The macOS shell blurs the vibrancy backdrop once, on the session pane.
+  // Nothing scrolls beneath the pane header or behind the transcript surface,
+  // so any further backdrop filter on the way down to the Working row is an
+  // invisible extra full-pane blur pass per repaint.
+  const composition = await evalIn(app, `(() => {
+    const pane = document.querySelector('main[data-session-pane]');
+    const row = document.querySelector('[data-loading-message="working"]');
+    const header = pane?.querySelector('header');
+    if (!(pane instanceof HTMLElement) || !(row instanceof HTMLElement) || !(header instanceof HTMLElement)) return null;
+    const filterOf = (element) => getComputedStyle(element).backdropFilter;
+    const nestedFilters = [];
+    for (let node = row.parentElement; node && node !== pane; node = node.parentElement) {
+      const filter = filterOf(node);
+      if (filter !== "none") nestedFilters.push(node.tagName.toLowerCase() + ": " + filter);
+    }
+    return {
+      isMac: document.documentElement.classList.contains("openwork-platform-mac"),
+      paneFilter: filterOf(pane),
+      headerFilter: filterOf(header),
+      nestedFilters,
+    };
+  })()`);
+  if (
+    !composition
+    || typeof composition !== "object"
+    || !("isMac" in composition)
+    || !("paneFilter" in composition)
+    || !("headerFilter" in composition)
+    || !("nestedFilters" in composition)
+    || typeof composition.isMac !== "boolean"
+    || typeof composition.paneFilter !== "string"
+    || typeof composition.headerFilter !== "string"
+    || !Array.isArray(composition.nestedFilters)
+  ) {
+    throw new Error(`Pane composition was not readable: ${JSON.stringify(composition)}`);
+  }
+  expect(composition.headerFilter).toBe("none");
+  expect(composition.nestedFilters).toEqual([]);
+  if (composition.isMac) expect(composition.paneFilter).toContain("blur(");
+  else expect(composition.paneFilter).toBe("none");
+  evidence.recordAssertionEvidence(
+    "The session pane is the only backdrop-filter surface above the transcript",
+    `Pane backdrop-filter “${composition.paneFilter}” (macOS shell: ${composition.isMac}); header “${composition.headerFilter}”; no filtered ancestors between the Working row and the pane.`,
+    true,
+  );
+
   await control(app, "eval.session_lifecycle.seed_unfinished_tools", { lifecycle: "active" });
   await waitFor(app, `Boolean(document.querySelector('[data-tool-aggregate-now] .ow-text-shimmer'))`, {
     timeoutMs: 15_000,
@@ -74,7 +168,7 @@ test.skipIf(!enabled)(title, async ({ evidence }) => {
   expect(aggregate.singularSummary).toContain("Running command");
   expect(aggregate.singularSummary).not.toContain("Running 1 command");
   evidence.recordAssertionEvidence(
-    "The aggregate Now state uses shimmer instead of a circular spinner",
+    "The aggregate activity row names the current step with shimmer instead of a circular spinner",
     `The live aggregate row remained readable as “${aggregate.text}” and contained no animate-spin indicator.`,
     true,
   );
