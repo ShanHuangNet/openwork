@@ -93,10 +93,18 @@ test(title, async ({ evidence, place }) => {
   const flip = await denFetch(den.admin, `/v1/admin/organizations/${orgId}/capabilities`, {
     method: "PUT",
     headers: { authorization: `Bearer ${den.admin.token}` },
-    body: JSON.stringify({ capabilities: { mcpConnections: true, cloud: true } }),
+    body: JSON.stringify({ capabilities: { mcpConnections: true } }),
   });
   if (!flip.response.ok) {
     throw new Error(`Enabling sidebar capabilities failed: HTTP ${flip.response.status} ${flip.text.slice(0, 500)}`);
+  }
+  const webAccess = await denFetch(den.admin, `/v1/admin/organizations/${orgId}/openwork-web-access`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${den.admin.token}` },
+    body: JSON.stringify({ enabled: true, reason: "den-sidebar-ia eval: complimentary OpenWork Web access for Cloud" }),
+  });
+  if (!webAccess.response.ok) {
+    throw new Error(`Granting OpenWork Web access failed: HTTP ${webAccess.response.status} ${webAccess.text.slice(0, 500)}`);
   }
 
   await using browser = await chrome({

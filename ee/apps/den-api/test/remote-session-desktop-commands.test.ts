@@ -104,6 +104,7 @@ function deps(input: {
   resolveRuntime?: RemoteSessionExecuteDeps["resolveRuntime"]
 } = {}): RemoteSessionExecuteDeps {
   return {
+    getOpenWorkWebAccess: async () => ({ hasAccess: true }),
     commandStore: input.commandStore ?? fakeStore(),
     desktopPresence: async () => ({
       connected: input.connected ?? false,
