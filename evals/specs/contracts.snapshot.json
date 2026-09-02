@@ -573,6 +573,19 @@
       ]
     },
     {
+      "id": "engine.attachment-normalization",
+      "description": "Engine-side attachment normalization plugins: Office text extraction and PDF routing by model input capability",
+      "implementation": [
+        "apps/server/src/opencode-plugins/openwork-office-attachments.ts",
+        "apps/server/src/opencode-plugins/openwork-pdf-attachments.ts",
+        "apps/server/src/pdf-attachments/**",
+        "apps/server/scripts/copy-pdfium-wasm.mjs"
+      ],
+      "specs": [
+        "evals/specs/pdf-attachments-model-routing.test.ts"
+      ]
+    },
+    {
       "id": "evals.daytona-e2e-regression-suite",
       "description": "Daytona E2E regression selection, placement, batching, and shared-stack lifecycle",
       "implementation": [
