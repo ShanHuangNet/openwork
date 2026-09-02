@@ -19,6 +19,8 @@ export interface BrowserOptions {
   host?: Host;
   startUrl?: string;
   headless?: boolean;
+  /** See ChromeSurfaceOptions.webSecurity. */
+  webSecurity?: false;
   timeoutMs?: number;
 }
 
@@ -37,6 +39,7 @@ export async function chrome(opts: BrowserOptions = {}): Promise<AttachedSurface
     profile: "fresh",
     startUrl: opts.startUrl,
     headless: opts.headless,
+    ...(opts.webSecurity === false ? { webSecurity: false } : {}),
   });
 
   let surface: AttachedSurface;

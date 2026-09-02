@@ -314,7 +314,7 @@ function spawnDetached(command: string, args: string[], { cwd, env, logPath }: S
   return { child, pid: child.pid };
 }
 
-function chromeArgs(cdpPort: number, profileDir: string, startUrl: string, headless: boolean): string[] {
+function chromeArgs(cdpPort: number, profileDir: string, startUrl: string, headless: boolean, webSecurity: boolean): string[] {
   const args = [
     `--remote-debugging-port=${cdpPort}`,
     `--user-data-dir=${profileDir}`,
@@ -324,6 +324,8 @@ function chromeArgs(cdpPort: number, profileDir: string, startUrl: string, headl
     "--disable-popup-blocking",
     // Avoid the Daytona preview h2 stall when ~28 dev chunks multiplex; h1.1 loads them, while plain-http local Den never negotiates h2.
     "--disable-http2",
+    // See ChromeSurfaceOptions.webSecurity: Daytona preview proxies duplicate CORS headers on actual responses.
+    ...(webSecurity ? [] : ["--disable-web-security"]),
     startUrl,
   ];
   return headless ? ["--headless=new", ...args] : args;
@@ -907,7 +909,7 @@ async function ensureDisplay(repoRoot: string, env: NodeJS.ProcessEnv, log: (mes
       const env: NodeJS.ProcessEnv = { ...process.env };
       const cdpUrl = `http://127.0.0.1:${cdpPort}`;
       const launch = async (headless: boolean): Promise<SpawnedDetached> => {
-        const spawned = spawnDetached(binary, chromeArgs(cdpPort, profileDir, startUrl, headless), { cwd: profileRoot, env, logPath });
+        const spawned = spawnDetached(binary, chromeArgs(cdpPort, profileDir, startUrl, headless, opts.webSecurity !== false), { cwd: profileRoot, env, logPath });
         await writeFile(join(profileDir, "openwork-eval-chrome.pid"), `${spawned.pid}\n`, "utf8");
         try {
           await waitForCdpOrExit("Chrome", cdpUrl, spawned, logPath);

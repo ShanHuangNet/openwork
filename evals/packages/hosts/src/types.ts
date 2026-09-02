@@ -22,6 +22,14 @@ export interface ChromeSurfaceOptions {
   profile?: "fresh" | "shared";
   startUrl?: string;
   headless?: boolean;
+  /**
+   * Launch with `--disable-web-security` (local host only). Daytona preview
+   * proxies duplicate `Access-Control-Allow-Origin` on actual responses, which
+   * browsers reject, so a runner-side admin browser cannot otherwise complete
+   * Den Web's cross-origin API calls against a Daytona Den. Only for browsers
+   * that drive a test's own Den; never for the app under test.
+   */
+  webSecurity?: false;
 }
 
 export interface DenServiceOptions {
