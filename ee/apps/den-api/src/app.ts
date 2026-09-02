@@ -47,6 +47,7 @@ import type { AuthContextVariables } from "./session.js"
 import { sessionMiddleware } from "./session.js"
 import { isOperationalErrorPath, normalizeOperationalErrorResponse, operationalErrorResponse } from "./operational-errors.js"
 import { sanitizePublicResponseHeaders } from "./public-response-headers.js"
+import { isPreviewEdgeManagedCorsOrigin } from "./cors-origin.js"
 
 type AppVariables = RequestIdVariables & AuthContextVariables & Partial<UserOrganizationsContext> & Partial<OrganizationContextVariables> & Partial<MemberTeamsContext>
 
@@ -128,17 +129,18 @@ app.use(
 registerCloudWorkerCompatibilityPreflightRoute(app)
 
 if (env.corsOrigins.length > 0) {
-  app.use(
-    "*",
-      cors({
-        origin: env.corsOrigins,
-        credentials: true,
-        allowHeaders: ["Content-Type", "Authorization", "X-Api-Key", "X-Request-Id", "X-OpenWork-Legacy-Org-Id", "X-OpenWork-Org-Id"],
-        allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        exposeHeaders: ["Content-Length"],
-        maxAge: 600,
-    }),
-  )
+  const appCors = cors({
+    origin: env.corsOrigins,
+    credentials: true,
+    allowHeaders: ["Content-Type", "Authorization", "X-Api-Key", "X-Request-Id", "X-OpenWork-Legacy-Org-Id", "X-OpenWork-Org-Id"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 600,
+  })
+  app.use("*", (c, next) => {
+    const origin = c.req.header("origin") ?? ""
+    return isPreviewEdgeManagedCorsOrigin(origin, env.devMode) ? next() : appCors(c, next)
+  })
 }
 
 app.use("*", sessionMiddleware)
