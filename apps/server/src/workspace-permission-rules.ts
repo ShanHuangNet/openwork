@@ -112,3 +112,51 @@ export async function removeWorkspacePermissionRule(
   }
   return true;
 }
+
+export type WorkspaceRunMode = "default" | "approve" | "run-everything";
+
+/**
+ * The workspace's catch-all as OpenCode spells it: `"permission": "ask"` or
+ * `"permission": { "*": "ask" }` mean "approve each step", `"allow"` means
+ * "run everything", and no catch-all leaves the engine's own defaults.
+ */
+export function runModeFromPermissionBlock(block: unknown): { mode: WorkspaceRunMode; catchAll: WorkspacePermissionAction | null } {
+  const catchAll = isAction(block) ? block : isRecord(block) && isAction(block["*"]) ? block["*"] : null;
+  if (catchAll === "ask") return { mode: "approve", catchAll };
+  if (catchAll === "allow") return { mode: "run-everything", catchAll };
+  return { mode: "default", catchAll };
+}
+
+export function catchAllForRunMode(mode: WorkspaceRunMode): WorkspacePermissionAction | null {
+  if (mode === "approve") return "ask";
+  if (mode === "run-everything") return "allow";
+  return null;
+}
+
+/**
+ * Write the catch-all for a run mode into the workspace's opencode.json, in
+ * the form the file already uses: a string shorthand stays a string, an
+ * object gets its `"*"` entry set first (the engine evaluates rules in file
+ * order, last match wins, so narrower entries must come after it) or removed,
+ * other entries are untouched. Returns false when the file already says that.
+ */
+export async function setWorkspaceRunMode(workspaceRoot: string, mode: WorkspaceRunMode): Promise<boolean> {
+  const path = opencodeConfigPath(workspaceRoot);
+  const block = await readPermissionBlock(workspaceRoot);
+  const target = catchAllForRunMode(mode);
+  const current = runModeFromPermissionBlock(block).catchAll;
+  if (current === target) return false;
+  if (isAction(block)) {
+    await updateJsoncPath(path, ["permission"], target ?? undefined);
+    return true;
+  }
+  if (isRecord(block)) {
+    // The engine reads rules in file order and the last match wins, so the
+    // catch-all must precede the narrower entries it is meant to yield to.
+    await updateJsoncPath(path, ["permission", "*"], target ?? undefined, { insertFirst: true });
+    return true;
+  }
+  if (target === null) return false;
+  await updateJsoncPath(path, ["permission"], { "*": target });
+  return true;
+}

@@ -115,7 +115,10 @@ import {
   addWorkspacePermissionRule,
   listWorkspacePermissionRules,
   removeWorkspacePermissionRule,
+  runModeFromPermissionBlock,
+  setWorkspaceRunMode,
   type WorkspacePermissionRule,
+  type WorkspaceRunMode,
 } from "./workspace-permission-rules.js";
 import { sanitizeDiagnosticString } from "./diagnostic-sanitizer.js";
 import {
@@ -2592,11 +2595,54 @@ function createRoutes(
         : `Removed permission rule ${rule.permission} ${rule.pattern}`,
       timestamp: Date.now(),
     });
-    if (changed) {
-      emitReloadEvent(ctx.reloadEvents, workspace, "config", buildConfigTrigger(configPath));
-    }
-    return jsonResponse({ changed, rules: await listWorkspacePermissionRules(workspace.path), path: configPath });
+    const refresh = changed ? await refreshWorkspaceEngineAfterConfigWrite(ctx, workspace, configPath) : "skipped";
+    return jsonResponse({ changed, refresh, rules: await listWorkspacePermissionRules(workspace.path), path: configPath });
   };
+
+  addRoute(routes, "GET", "/workspace/:id/permissions/mode", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const { mode, catchAll } = runModeFromPermissionBlock((await readOpencodeConfig(workspace.path)).permission);
+    return jsonResponse({ mode, catchAll, path: opencodeConfigPath(workspace.path) });
+  });
+
+  // The run mode is the workspace file's catch-all, written the way OpenCode
+  // spells it. It is the engine's last-read layer, so it is the last word for
+  // this workspace — including over a global opencode.json, as for any
+  // OpenCode project config.
+  addRoute(routes, "PUT", "/workspace/:id/permissions/mode", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const mode = parseWorkspaceRunMode(body.mode);
+    if (!mode) {
+      throw new ApiError(400, "invalid_payload", 'mode must be "default", "approve", or "run-everything"');
+    }
+    const configPath = opencodeConfigPath(workspace.path);
+    await requireApproval(ctx, {
+      workspaceId: workspace.id,
+      action: "config.write",
+      summary: mode === "run-everything"
+        ? "Let agents run every tool in this workspace without asking"
+        : mode === "approve"
+          ? "Ask before every tool in this workspace"
+          : "Return this workspace to the engine's default permissions",
+      paths: [configPath],
+    });
+    const changed = await setWorkspaceRunMode(workspace.path, mode);
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "config.write",
+      target: configPath,
+      summary: `Set workspace run mode to ${mode}`,
+      timestamp: Date.now(),
+    });
+    const refresh = changed ? await refreshWorkspaceEngineAfterConfigWrite(ctx, workspace, configPath) : "skipped";
+    const { catchAll } = runModeFromPermissionBlock((await readOpencodeConfig(workspace.path)).permission);
+    return jsonResponse({ mode, catchAll, changed, refresh, path: configPath });
+  });
 
   addRoute(routes, "POST", "/workspace/:id/permissions/rules", "client", (ctx) =>
     changeWorkspacePermissionRule(ctx, (workspace, rule) => addWorkspacePermissionRule(workspace.path, rule), true, "add"));
@@ -4180,6 +4226,33 @@ function opencodeDisposeTimeoutMs(): number {
  * activity reports false: a reload against a dead engine fails loudly on its
  * own, and "unknown" must never park reloads forever.
  */
+function parseWorkspaceRunMode(value: unknown): WorkspaceRunMode | null {
+  return value === "default" || value === "approve" || value === "run-everything" ? value : null;
+}
+
+/**
+ * A workspace opencode.json write reaches the engine when this directory's
+ * instance is rebuilt. Rebuild it now when the workspace is idle so the
+ * effective view and the next prompt reflect the file; a busy workspace keeps
+ * its live run and picks the change up through the recorded reload event.
+ */
+async function refreshWorkspaceEngineAfterConfigWrite(
+  ctx: RequestContext,
+  workspace: WorkspaceInfo,
+  configPath: string,
+): Promise<"reloaded" | "deferred" | "skipped"> {
+  emitReloadEvent(ctx.reloadEvents, workspace, "config", buildConfigTrigger(configPath));
+  if (workspace.workspaceType === "remote") return "skipped";
+  if (await engineHasActiveSessions(ctx.config, workspace)) return "deferred";
+  try {
+    await reloadOpencodeEngineInPlace(ctx.config, workspace, undefined, { awaitPostRefreshSync: false });
+    return "reloaded";
+  } catch {
+    // No reachable engine for this workspace yet; the reload event still stands.
+    return "skipped";
+  }
+}
+
 async function engineHasActiveSessions(config: ServerConfig, workspace: WorkspaceInfo): Promise<boolean> {
   try {
     const opencode = createWorkspaceOpencodeClient(config, workspace);

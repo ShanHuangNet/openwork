@@ -85,6 +85,7 @@ import { GeneralSettingsView } from "@/react-app/domains/settings/pages/general-
 import { AuthorizedFoldersPanel } from "@/react-app/domains/settings/panels/authorized-folders-panel";
 import { EffectivePermissionsPanel } from "@/react-app/domains/settings/panels/effective-permissions-panel";
 import { WorkspacePermissionRulesPanel } from "@/react-app/domains/settings/panels/workspace-permission-rules-panel";
+import { WorkspaceRunModePanel } from "@/react-app/domains/settings/panels/workspace-run-mode-panel";
 import { SettingsStack } from "@/react-app/domains/settings/settings-section";
 import { AdvancedView } from "@/react-app/domains/settings/pages/advanced-view";
 import { AppearanceView } from "@/react-app/domains/settings/pages/appearance-view";
@@ -2373,6 +2374,17 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "permissions":
         return (
           <SettingsStack>
+            <WorkspaceRunModePanel
+              openworkServerClient={openworkClient}
+              openworkServerStatus={routeOpenworkStatus}
+              openworkServerCapabilities={routeOpenworkCapabilities}
+              runtimeWorkspaceId={runtimeWorkspaceId}
+              refreshToken={permissionsRefreshToken}
+              onModeChanged={() => {
+                setConfigActionStatus(t("settings.config_updated"));
+                setPermissionsRefreshToken((token) => token + 1);
+              }}
+            />
             <EffectivePermissionsPanel
               openworkServerClient={openworkClient}
               openworkServerStatus={routeOpenworkStatus}

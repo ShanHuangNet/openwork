@@ -153,20 +153,28 @@ export async function updateJsoncTopLevel(path: string, updates: Record<string, 
   await writeFile(path, content.endsWith("\n") ? content : content + "\n", "utf8");
 }
 
-export async function updateJsoncPath(path: string, jsonPath: (string | number)[], value: unknown): Promise<void> {
+export async function updateJsoncPath(
+  path: string,
+  jsonPath: (string | number)[],
+  value: unknown,
+  options?: { insertFirst?: boolean },
+): Promise<void> {
   const formattingOptions = { insertSpaces: true, tabSize: 2, eol: "\n" };
+  // A new property lands last by default; `insertFirst` puts it before the
+  // existing ones (an existing property keeps its position either way).
+  const modification = { formattingOptions, ...(options?.insertFirst ? { getInsertionIndex: () => 0 } : {}) };
   const hasFile = await exists(path);
   if (!hasFile) {
     await ensureDir(dirname(path));
     let content = "{}\n";
-    const edits = modify(content, jsonPath, value, { formattingOptions });
+    const edits = modify(content, jsonPath, value, modification);
     content = applyEdits(content, edits);
     await writeFile(path, content.endsWith("\n") ? content : content + "\n", "utf8");
     return;
   }
 
   let content = await readFile(path, "utf8");
-  const edits = modify(content, jsonPath, value, { formattingOptions });
+  const edits = modify(content, jsonPath, value, modification);
   content = applyEdits(content, edits);
   await writeFile(path, content.endsWith("\n") ? content : content + "\n", "utf8");
 }

@@ -321,6 +321,19 @@ export type OpenworkWorkspacePermissionRulesUpdateResponse = OpenworkWorkspacePe
   changed: boolean;
 };
 
+export type OpenworkWorkspaceRunMode = "default" | "approve" | "run-everything";
+
+export type OpenworkWorkspaceRunModeResponse = {
+  mode: OpenworkWorkspaceRunMode;
+  catchAll: OpenworkPermissionAction | null;
+  path: string;
+};
+
+export type OpenworkWorkspaceRunModeUpdateResponse = OpenworkWorkspaceRunModeResponse & {
+  changed: boolean;
+  refresh: "reloaded" | "deferred" | "skipped";
+};
+
 export type OpenworkAuthorizedFoldersUpdateResponse = {
   folders: string[];
   hiddenCount: number;
@@ -1715,6 +1728,18 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/permissions/rules`,
         { token, hostToken, method: "DELETE", body: rule, timeoutMs: timeouts.config },
+      ),
+    getWorkspaceRunMode: (workspaceId: string) =>
+      requestJson<OpenworkWorkspaceRunModeResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/permissions/mode`,
+        { token, hostToken, timeoutMs: timeouts.config },
+      ),
+    setWorkspaceRunMode: (workspaceId: string, mode: OpenworkWorkspaceRunMode) =>
+      requestJson<OpenworkWorkspaceRunModeUpdateResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/permissions/mode`,
+        { token, hostToken, method: "PUT", body: { mode }, timeoutMs: ENGINE_RELOAD_TIMEOUT_MS },
       ),
     listAuthorizedFolders: (workspaceId: string) =>
       requestJson<OpenworkAuthorizedFoldersResponse>(
