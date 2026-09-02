@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startServer } from "./server.js";
+import { opencodeConfigPath } from "./workspace-files.js";
 import type { ServerConfig } from "./types.js";
 import {
   addWorkspacePermissionRule,
   listWorkspacePermissionRules,
   removeWorkspacePermissionRule,
   rulesFromPermissionBlock,
+  runModeFromPermissionBlock,
+  setWorkspaceRunMode,
 } from "./workspace-permission-rules.js";
 
 type Served = { port: number; stop: (closeActiveConnections?: boolean) => void | Promise<void> };
@@ -159,5 +162,85 @@ describe("workspace permission rules routes", () => {
     expect(viewerWrite.status).toBe(403);
     const viewerRead = await fetch(base, { headers: { authorization: `Bearer ${viewerToken}` } });
     expect(viewerRead.status).toBe(200);
+  });
+});
+
+describe("workspace run mode as the file's catch-all", () => {
+  test("reads the catch-all in either spelling and writes it back in the spelling the file uses", async () => {
+    expect(runModeFromPermissionBlock(undefined)).toEqual({ mode: "default", catchAll: null });
+    expect(runModeFromPermissionBlock("allow")).toEqual({ mode: "run-everything", catchAll: "allow" });
+    expect(runModeFromPermissionBlock({ "*": "ask", bash: "allow" })).toEqual({ mode: "approve", catchAll: "ask" });
+    expect(runModeFromPermissionBlock({ "*": "deny" })).toEqual({ mode: "default", catchAll: "deny" });
+
+    // No file yet: approve creates the object form.
+    const fresh = await workspaceRoot();
+    expect(await setWorkspaceRunMode(fresh, "default")).toBe(false);
+    expect(await setWorkspaceRunMode(fresh, "approve")).toBe(true);
+    // A workspace without a config file gets the repository's preferred name, opencode.jsonc.
+    expect(opencodeConfigPath(fresh)).toBe(join(fresh, "opencode.jsonc"));
+    expect(JSON.parse(await readFile(opencodeConfigPath(fresh), "utf8"))).toEqual({ permission: { "*": "ask" } });
+    expect(await setWorkspaceRunMode(fresh, "approve")).toBe(false);
+
+    // Object form with other entries: only "*" changes; comments stay.
+    const object = await workspaceRoot(`{
+  // hand-written
+  "permission": { "bash": { "git status *": "allow" } }
+}
+`);
+    expect(await setWorkspaceRunMode(object, "run-everything")).toBe(true);
+    // The catch-all is inserted first: the engine evaluates in file order and
+    // the last match wins, so the hand-written narrower rule must follow it.
+    expect(await listWorkspacePermissionRules(object)).toEqual([
+      { permission: "*", pattern: "*", action: "allow" },
+      { permission: "bash", pattern: "git status *", action: "allow" },
+    ]);
+    expect(await readFile(join(object, "opencode.json"), "utf8")).toContain("// hand-written");
+    expect(await setWorkspaceRunMode(object, "default")).toBe(true);
+    expect(await listWorkspacePermissionRules(object)).toEqual([{ permission: "bash", pattern: "git status *", action: "allow" }]);
+
+    // String shorthand stays a string; default removes it.
+    const shorthand = await workspaceRoot(`{ "permission": "allow" }\n`);
+    expect(await setWorkspaceRunMode(shorthand, "approve")).toBe(true);
+    expect(JSON.parse(await readFile(join(shorthand, "opencode.json"), "utf8"))).toEqual({ permission: "ask" });
+    expect(await setWorkspaceRunMode(shorthand, "default")).toBe(true);
+    expect(JSON.parse(await readFile(join(shorthand, "opencode.json"), "utf8"))).toEqual({});
+  });
+
+  test("the mode routes read and write the file for collaborators", async () => {
+    const root = await workspaceRoot(JSON.stringify({ permission: { edit: "deny" } }));
+    process.env.OPENWORK_DATA_DIR = join(root, "data");
+    process.env.OPENWORK_TOKEN_STORE = join(root, "tokens.json");
+    const config: ServerConfig = {
+      host: "127.0.0.1",
+      port: 0,
+      configPath: join(root, "server.json"),
+      token: CLIENT_TOKEN,
+      hostToken: HOST_TOKEN,
+      approval: { mode: "auto", timeoutMs: 1000 },
+      corsOrigins: ["*"],
+      workspaces: [{ id: "ws_1", name: "Workspace", path: root, preset: "starter", workspaceType: "local" }],
+      authorizedRoots: [root],
+      readOnly: false,
+      startedAt: Date.now(),
+      tokenSource: "cli",
+      hostTokenSource: "cli",
+      logFormat: "pretty",
+      logRequests: false,
+    };
+    const server = await startServer(config) as Served;
+    stops.push(() => server.stop(true));
+    const base = `http://127.0.0.1:${server.port}/workspace/ws_1/permissions/mode`;
+    const headers = { authorization: `Bearer ${CLIENT_TOKEN}`, "content-type": "application/json" };
+
+    expect(await (await fetch(base, { headers })).json()).toMatchObject({ mode: "default", catchAll: null, path: join(root, "opencode.json") });
+    const set = await fetch(base, { method: "PUT", headers, body: JSON.stringify({ mode: "run-everything" }) });
+    expect(set.status).toBe(200);
+    expect(await set.json()).toMatchObject({ mode: "run-everything", catchAll: "allow", changed: true, refresh: "skipped" });
+    expect(JSON.parse(await readFile(join(root, "opencode.json"), "utf8"))).toEqual({ permission: { edit: "deny", "*": "allow" } });
+    expect(await (await fetch(base, { method: "PUT", headers, body: JSON.stringify({ mode: "run-everything" }) })).json()).toMatchObject({ changed: false });
+    expect((await fetch(base, { method: "PUT", headers, body: JSON.stringify({ mode: "yolo" }) })).status).toBe(400);
+    const back = await fetch(base, { method: "PUT", headers, body: JSON.stringify({ mode: "default" }) });
+    expect(await back.json()).toMatchObject({ mode: "default", catchAll: null, changed: true });
+    expect(JSON.parse(await readFile(join(root, "opencode.json"), "utf8"))).toEqual({ permission: { edit: "deny" } });
   });
 });
