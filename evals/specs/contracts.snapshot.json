@@ -95,6 +95,26 @@
       ]
     },
     {
+      "id": "den.desktop-policies",
+      "description": "Desktop policy catalog, Den policy editor with Restricted mode, effective-policy resolution, and desktop enforcement of settings and extension locks",
+      "implementation": [
+        "apps/app/src/app/cloud/desktop-app-restrictions.ts",
+        "apps/app/src/react-app/domains/cloud/restriction-notice-provider.tsx",
+        "apps/app/src/react-app/domains/settings/shell/settings-page.tsx",
+        "apps/app/src/react-app/domains/settings/shell/settings-shell.tsx",
+        "ee/apps/den-api/src/desktop-policies.ts",
+        "ee/apps/den-api/src/routes/org/desktop-policies.ts",
+        "ee/apps/den-web/app/(den)/dashboard/(admin)/desktop-policies/**",
+        "ee/apps/den-web/app/(den)/dashboard/_components/desktop-policies-screen.tsx",
+        "ee/apps/den-web/app/(den)/dashboard/_components/desktop-policy-data.tsx",
+        "ee/apps/den-web/app/(den)/dashboard/_components/desktop-policy-editor-screen.tsx",
+        "packages/types/src/den/desktop-policies.ts"
+      ],
+      "specs": [
+        "evals/specs/desktop-policy-restricted-mode.e2e.test.ts"
+      ]
+    },
+    {
       "id": "den.install-bootstrap",
       "description": "Enterprise bootstrap, invitations, install links, downloads, and first-run deployment setup",
       "implementation": [
