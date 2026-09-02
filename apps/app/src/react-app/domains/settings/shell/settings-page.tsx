@@ -42,11 +42,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { t } from "../../../../i18n";
+import { isSettingsTabAllowed } from "../../../../app/cloud/desktop-app-restrictions";
 import type { PlatformCapabilities } from "../../../../app/lib/platform-capabilities";
 import type { SettingsTab } from "../../../../app/types";
 import { cn } from "@/lib/utils";
 import { usePlatform } from "../../../kernel/platform";
-import { useOrgRestrictions } from "../../cloud/desktop-config-provider";
+import { useCheckDesktopRestriction, useOrgRestrictions } from "../../cloud/desktop-config-provider";
 import {
   SettingsContent,
   SettingsPanel,
@@ -241,6 +242,33 @@ export function getCloudSettingsTabs(memoryEnabled: boolean): SettingsTab[] {
   return memoryEnabled ? ["cloud-account", "memory"] : CLOUD_SETTINGS_TABS;
 }
 
+export type SettingsNavGroups = {
+  hub: SettingsTab[];
+  workspace: SettingsTab[];
+  global: SettingsTab[];
+  cloud: SettingsTab[];
+};
+
+/**
+ * Every settings navigation surface (sidebar + compact section menu) reads its
+ * tabs from here so platform capabilities, preview flags, and the
+ * `allowControlSettings` desktop policy cannot drift between them. When the
+ * organization blocks settings control, only the Cloud group remains.
+ */
+export function useSettingsNavGroups(developerMode: boolean): SettingsNavGroups {
+  const platform = usePlatform();
+  const { memoryEnabled } = useFeatureFlagsPreferences();
+  const checkRestriction = useCheckDesktopRestriction();
+  const allowed = (tabs: SettingsTab[]) =>
+    tabs.filter((tab) => isSettingsTabAllowed({ tab, checkRestriction }));
+  return {
+    hub: allowed(["general"]),
+    workspace: allowed(getWorkspaceSettingsTabs()),
+    global: allowed(getGlobalSettingsTabs(developerMode, platform.capabilities)),
+    cloud: allowed(getCloudSettingsTabs(memoryEnabled)),
+  };
+}
+
 type SettingsPageProps = {
   activeTab: SettingsTab;
   onSelectTab: (tab: SettingsTab) => void;
@@ -266,12 +294,39 @@ type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" 
   onSelectWorkspace: (workspaceId: string) => void;
 };
 
+function SettingsSidebarGroup(props: {
+  label: string;
+  tabs: SettingsTab[];
+  activeTab: SettingsTab;
+  onSelectTab: (tab: SettingsTab) => void;
+}) {
+  if (props.tabs.length === 0) return null;
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{props.label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {props.tabs.map((tab) => {
+            const Icon = getSettingsTabIcon(tab);
+            return (
+              <SidebarDestination
+                key={tab}
+                active={isSettingsTabActive(props.activeTab, tab)}
+                icon={Icon}
+                label={getSettingsTabLabel(tab)}
+                labelContent={<SettingsSidebarTabLabel tab={tab} />}
+                onSelect={() => props.onSelectTab(tab)}
+              />
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
 export function SettingsSidebar(props: SettingsSidebarProps) {
-  const platform = usePlatform();
-  const { memoryEnabled } = useFeatureFlagsPreferences();
-  const workspaceTabs = getWorkspaceSettingsTabs();
-  const globalTabs = getGlobalSettingsTabs(props.developerMode, platform.capabilities);
-  const cloudTabs = getCloudSettingsTabs(memoryEnabled);
+  const groups = useSettingsNavGroups(props.developerMode);
 
   return (
     <Sidebar collapsible="icon" className="mac:**:data-[sidebar=sidebar]:bg-transparent">
@@ -311,87 +366,45 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
       </SidebarHeader>
       <SidebarContent>
         {/* Top-level hub entry */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  type="button"
-                  isActive={isSettingsTabActive(props.activeTab, "general")}
-                  aria-current={isSettingsTabActive(props.activeTab, "general") ? "page" : undefined}
-                  tooltip={getSettingsTabLabel("general")}
-                  onClick={() => props.onSelectTab("general")}
-                >
-                  <Cog />
-                  <span>{getSettingsTabLabel("general")}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {groups.hub.length > 0 ? (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    type="button"
+                    isActive={isSettingsTabActive(props.activeTab, "general")}
+                    aria-current={isSettingsTabActive(props.activeTab, "general") ? "page" : undefined}
+                    tooltip={getSettingsTabLabel("general")}
+                    onClick={() => props.onSelectTab("general")}
+                  >
+                    <Cog />
+                    <span>{getSettingsTabLabel("general")}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
 
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("settings.group_workspace")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {workspaceTabs.map((tab) => {
-                const Icon = getSettingsTabIcon(tab);
-                return (
-                  <SidebarDestination
-                    key={tab}
-                    active={isSettingsTabActive(props.activeTab, tab)}
-                    icon={Icon}
-                    label={getSettingsTabLabel(tab)}
-                    labelContent={<SettingsSidebarTabLabel tab={tab} />}
-                    onSelect={() => props.onSelectTab(tab)}
-                  />
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("settings.group_global")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {globalTabs.map((tab) => {
-                const Icon = getSettingsTabIcon(tab);
-                return (
-                  <SidebarDestination
-                    key={tab}
-                    active={isSettingsTabActive(props.activeTab, tab)}
-                    icon={Icon}
-                    label={getSettingsTabLabel(tab)}
-                    labelContent={<SettingsSidebarTabLabel tab={tab} />}
-                    onSelect={() => props.onSelectTab(tab)}
-                  />
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("settings.group_cloud")}</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {cloudTabs.map((tab) => {
-                const Icon = getSettingsTabIcon(tab);
-                return (
-                  <SidebarDestination
-                    key={tab}
-                    active={isSettingsTabActive(props.activeTab, tab)}
-                    icon={Icon}
-                    label={getSettingsTabLabel(tab)}
-                    labelContent={<SettingsSidebarTabLabel tab={tab} />}
-                    onSelect={() => props.onSelectTab(tab)}
-                  />
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <SettingsSidebarGroup
+          label={t("settings.group_workspace")}
+          tabs={groups.workspace}
+          activeTab={props.activeTab}
+          onSelectTab={props.onSelectTab}
+        />
+        <SettingsSidebarGroup
+          label={t("settings.group_global")}
+          tabs={groups.global}
+          activeTab={props.activeTab}
+          onSelectTab={props.onSelectTab}
+        />
+        <SettingsSidebarGroup
+          label={t("settings.group_cloud")}
+          tabs={groups.cloud}
+          activeTab={props.activeTab}
+          onSelectTab={props.onSelectTab}
+        />
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

@@ -26,6 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { desktopRestrictionNotice } from "../../../../app/cloud/desktop-app-restrictions";
 import { isBuiltInOpenWorkExtension, getMcpServerName, type McpDirectoryInfo } from "../../../../app/constants";
 import { evaluateEnablement } from "../../../../app/enablement";
 import type { EnablementResult } from "../../../../app/extensions";
@@ -229,6 +230,7 @@ export type McpViewProps = {
 };
 
 const builtInExtensionDisabledReason = () => t("extensions.disabled_by_organization");
+const manageExtensionsDisabledReason = () => desktopRestrictionNotice("allowManageExtensions");
 
 const statusDot = (status: ReactMcpStatus) => {
   switch (status) {
@@ -891,6 +893,19 @@ export function McpView(props: McpViewProps) {
     return isQuickConnectConfigured(entry);
   };
 
+  // Built-in OpenWork extensions answer to `allowBuiltInExtensions`; every
+  // other directory entry is a local install governed by
+  // `allowManageExtensions`. Entries the member already installed stay usable
+  // but can no longer be managed.
+  const builtInDisabledReasonForEntry = (entry: McpDirectoryInfo) =>
+    props.builtInExtensionsDisabled && isBuiltInOpenWorkExtension(entry)
+      ? builtInExtensionDisabledReason()
+      : null;
+  const manageDisabledReasonForEntry = (entry: McpDirectoryInfo) =>
+    !props.allowManageExtensions && !isBuiltInOpenWorkExtension(entry)
+      ? manageExtensionsDisabledReason()
+      : null;
+
   const launchCommandForEntry = (entry: McpDirectoryInfo) => {
     if (entry.serverName === "openwork-ui") return openworkUiMcpCommand ?? undefined;
     if (entry.serverName === "computer-use") return computerUseMcpCommand ?? entry.command;
@@ -975,10 +990,9 @@ export function McpView(props: McpViewProps) {
         const extensionConfigSlot = props.configSlotForEntry?.(detailEntry) ?? null;
         const hasConfigSlot = extensionConfigSlot !== null;
         const hidden = isOpenWorkExtensionHidden(detailEntry);
-        const disabledReason = props.builtInExtensionsDisabled && isBuiltInOpenWorkExtension(detailEntry)
-          ? builtInExtensionDisabledReason()
-          : null;
-        const isConnected = disabledReason
+        const builtInDisabledReason = builtInDisabledReasonForEntry(detailEntry);
+        const disabledReason = builtInDisabledReason ?? manageDisabledReasonForEntry(detailEntry);
+        const isConnected = builtInDisabledReason
           ? false
           : isToggleOnlyExtension(detailEntry)
           ? isOpenWorkExtensionEnabled(detailEntry)
@@ -1326,6 +1340,15 @@ export function McpView(props: McpViewProps) {
         </div>
       ) : null}
 
+      {props.allowManageExtensions ? null : (
+        <div
+          data-testid="manage-extensions-policy-notice"
+          className="mb-5 rounded-xl border border-amber-6 bg-amber-2 px-4 py-3 text-xs text-amber-11"
+        >
+          {manageExtensionsDisabledReason()}
+        </div>
+      )}
+
       {libraryAddKinds.length > 0 || skillAddPending ? (
         <div className="mb-5 flex justify-end">
           <LibraryAddControl
@@ -1492,9 +1515,8 @@ export function McpView(props: McpViewProps) {
         isSkillHidden={(skill) => isOpenWorkExtensionHidden(getSkillHiddenId(skill))}
         isPluginHidden={(plugin) => isOpenWorkExtensionHidden(`plugin:${plugin.pluginId}`)}
         disabledReasonForEntry={(entry) =>
-          props.builtInExtensionsDisabled && isBuiltInOpenWorkExtension(entry)
-            ? builtInExtensionDisabledReason()
-            : null
+          builtInDisabledReasonForEntry(entry)
+            ?? (isEntryConfigured(entry) ? null : manageDisabledReasonForEntry(entry))
         }
         isConfigured={isEntryConfigured}
         enablementForEntry={props.enablementContext ? enablementForEntry : undefined}
@@ -1595,7 +1617,7 @@ export function McpView(props: McpViewProps) {
         onReveal={revealConfig}
         onAddMcp={props.allowManageExtensions ? () => setAddMcpModalOpen(true) : undefined}
         onImportFromGithub={
-          props.previewClaudePlugin && props.installClaudePlugin
+          props.allowManageExtensions && props.previewClaudePlugin && props.installClaudePlugin
             ? () => setClaudeImportOpen(true)
             : undefined
         }
@@ -1618,7 +1640,7 @@ export function McpView(props: McpViewProps) {
         onCreate={handleCreateLibraryItem}
       />
 
-      {props.previewClaudePlugin && props.installClaudePlugin ? (
+      {props.allowManageExtensions && props.previewClaudePlugin && props.installClaudePlugin ? (
         <ClaudePluginImportModal
           open={claudeImportOpen}
           onClose={() => setClaudeImportOpen(false)}

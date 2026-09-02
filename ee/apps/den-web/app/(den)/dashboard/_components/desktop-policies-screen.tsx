@@ -3,6 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Laptop, Plus } from "lucide-react";
+import {
+  desktopPolicyKeys,
+  isRestrictedDesktopPolicyValue,
+  type DesktopPolicyDocument,
+  type DesktopPolicyValue,
+} from "@openwork/types/den/desktop-policies";
 import { DashboardPageTemplate } from "../../_components/ui/dashboard-page-template";
 import { DenButton, buttonVariants } from "../../_components/ui/button";
 import { getDesktopPolicyRoute, getNewDesktopPolicyRoute, getOrgAccessFlags } from "../../_lib/den-org";
@@ -23,6 +29,14 @@ function formatPolicyTimestamp(value: string | null) {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function isRestrictedPolicy(policy: DesktopPolicyDocument) {
+  return isRestrictedDesktopPolicyValue(
+    Object.fromEntries(
+      desktopPolicyKeys.map((key) => [key, policy[key] === true]),
+    ) as Required<DesktopPolicyValue>,
+  );
 }
 
 export function DesktopPoliciesScreen() {
@@ -134,6 +148,14 @@ export function DesktopPoliciesScreen() {
                           <span className="text-[14px] font-medium text-gray-950">{policy.policyName}</span>
                           {policy.isDefault ? (
                             <span className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.1em] leading-none text-sky-700">Default</span>
+                          ) : null}
+                          {isRestrictedPolicy(policy.policy) ? (
+                            <span
+                              data-testid="desktop-policy-restricted-badge"
+                              className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.1em] leading-none text-amber-700"
+                            >
+                              Restricted
+                            </span>
                           ) : null}
                         </div>
                       </td>

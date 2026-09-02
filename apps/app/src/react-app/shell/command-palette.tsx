@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { BrainCircuit, Check, ChevronLeftIcon, Columns2, FileText, FolderInput, Globe, Zap } from "lucide-react";
 import type { ModelOption, ModelRef } from "@/app/types";
 import { ProviderIcon } from "@/react-app/design-system/provider-icon";
+import { useDesktopRestriction } from "../domains/cloud/desktop-config-provider";
 import { usePlatform } from "../kernel/platform";
 import {
   resolveSessionNumberShortcutOs,
@@ -210,6 +211,9 @@ export function CommandPalette(props: CommandPaletteProps) {
     [sessionNumberOs],
   );
   const hasNestedModelPicker = props.modelOptions !== undefined && props.onSelectModel !== undefined;
+  // Organization policy can hide desktop settings; only the account-level
+  // Settings entry stays because that surface remains reachable.
+  const controlSettingsBlocked = useDesktopRestriction("allowControlSettings");
 
   const rootItems = useMemo<PaletteItem[]>(() => [
     {
@@ -315,8 +319,8 @@ export function CommandPalette(props: CommandPaletteProps) {
     ...(props.extraItems ?? []),
     {
       id: "open-settings",
-      title: t("settings.tab_general"),
-      detail: t("settings.tab_description_general"),
+      title: controlSettingsBlocked ? t("settings.tab_cloud_account") : t("settings.tab_general"),
+      detail: controlSettingsBlocked ? t("settings.tab_description_cloud_account") : t("settings.tab_description_general"),
       meta: t("session.cmd_settings_meta"),
       action: () => {
         props.onClose();
@@ -355,37 +359,41 @@ export function CommandPalette(props: CommandPaletteProps) {
         props.onOpenExtensions();
       },
     },
-    {
-      id: "settings-appearance",
-      title: t("settings.tab_appearance"),
-      detail: t("settings.tab_description_appearance"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/appearance");
-      },
-    },
-    {
-      id: "settings-recovery",
-      title: t("settings.tab_recovery"),
-      detail: t("settings.tab_description_recovery"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/recovery");
-      },
-    },
-    {
-      id: "settings-updates",
-      title: t("settings.tab_updates"),
-      detail: t("settings.tab_description_updates"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/updates");
-      },
-    },
-  ], [accessibleTargetCount, canMoveCurrentSessionToGroup, hasNestedModelPicker, props, sessionGroupCount, sessionNumberHelp]);
+    ...(controlSettingsBlocked
+      ? []
+      : [
+          {
+            id: "settings-appearance",
+            title: t("settings.tab_appearance"),
+            detail: t("settings.tab_description_appearance"),
+            meta: t("session.cmd_settings_meta"),
+            action: () => {
+              props.onClose();
+              props.onOpenSettings("/settings/appearance");
+            },
+          },
+          {
+            id: "settings-recovery",
+            title: t("settings.tab_recovery"),
+            detail: t("settings.tab_description_recovery"),
+            meta: t("session.cmd_settings_meta"),
+            action: () => {
+              props.onClose();
+              props.onOpenSettings("/settings/recovery");
+            },
+          },
+          {
+            id: "settings-updates",
+            title: t("settings.tab_updates"),
+            detail: t("settings.tab_description_updates"),
+            meta: t("session.cmd_settings_meta"),
+            action: () => {
+              props.onClose();
+              props.onOpenSettings("/settings/updates");
+            },
+          },
+        ]),
+  ], [accessibleTargetCount, canMoveCurrentSessionToGroup, controlSettingsBlocked, hasNestedModelPicker, props, sessionGroupCount, sessionNumberHelp]);
 
   const sessionItems = useMemo<PaletteItem[]>(
     () =>
