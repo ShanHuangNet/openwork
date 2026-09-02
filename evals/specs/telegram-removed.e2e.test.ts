@@ -75,18 +75,31 @@ test(title, async ({ evidence, place }) => {
 
   await navigate(browser.client, `${den.ref.webUrl}/dashboard/mcp-connections`);
   await waitFor(browser, `(() => {
-    const headers = [...document.querySelectorAll("h4")].map((entry) => (entry.textContent ?? "").trim());
     return location.pathname === "/dashboard/mcp-connections"
-      && Boolean(document.querySelector('[data-testid="connector-quick-add-grid"]'))
-      && headers.includes("From your workspace suite");
+      && Boolean(document.querySelector('[data-testid="connector-catalog"]'))
+      && Boolean(document.querySelector('[data-testid="popular-connectors"]'))
+      && document.querySelector('[data-testid="connector-catalog-more"]') instanceof HTMLButtonElement;
   })()`, {
     timeoutMs: 60_000,
-    label: "connectors quick-add grid with the workspace suite group",
+    label: "connector catalog with the Popular section and the collapsed More teaser",
+  });
+  // Microsoft 365 lives in the More section; expand it so the whole catalog
+  // surface is on the page before the Telegram scan.
+  const expanded = await evalIn(browser, `(() => {
+    const more = document.querySelector('[data-testid="connector-catalog-more"]');
+    if (!(more instanceof HTMLButtonElement)) return false;
+    more.click();
+    return true;
+  })()`);
+  expect(expanded).toBe(true);
+  await waitFor(browser, `Boolean(document.querySelector('[data-testid="more-connectors"]'))`, {
+    timeoutMs: 20_000,
+    label: "expanded More connectors section",
   });
 
   const suiteState = await evalIn(browser, `(() => {
-    const grid = document.querySelector('[data-testid="connector-quick-add-grid"]');
-    const gridText = grid?.textContent ?? "";
+    const catalog = document.querySelector('[data-testid="connector-catalog"]');
+    const catalogText = catalog?.textContent ?? "";
     const body = document.body.innerText;
     // Report where any residual mention sits, so a failure names its source
     // instead of only asserting that one exists somewhere on the page.
@@ -98,11 +111,13 @@ test(title, async ({ evidence, place }) => {
       if (mentions.length >= 5) break;
     }
     return {
-      googleWorkspace: gridText.includes("Google Workspace"),
-      microsoft365: gridText.includes("Microsoft 365"),
+      googleWorkspace: Boolean(document.querySelector('[data-testid="connector-row-gmail"]'))
+        && Boolean(document.querySelector('[data-testid="connector-row-google-drive"]'))
+        && Boolean(document.querySelector('[data-testid="connector-row-google-calendar"]')),
+      microsoft365: catalogText.includes("Microsoft 365"),
       telegramText: mentions.length > 0,
       telegramMentions: mentions,
-      telegramTile: Boolean(document.querySelector('[data-testid="quick-add-telegram"]')),
+      telegramTile: Boolean(document.querySelector('[data-testid="connector-row-telegram"]')),
       loadError: body.includes("Failed to load"),
     };
   })()`);
@@ -116,15 +131,15 @@ test(title, async ({ evidence, place }) => {
     && suiteState.loadError === false;
   expect(surfaceClean, JSON.stringify(suiteState)).toBe(true);
   evidence.recordAssertionEvidence(
-    "The workspace-suite quick add still offers Google Workspace and Microsoft 365, with no Telegram tile or Telegram text and no load failure",
+    "The connector catalog still offers Google Workspace (Gmail, Drive, Calendar) and Microsoft 365, with no Telegram row or Telegram text and no load failure",
     JSON.stringify(suiteState),
     surfaceClean,
   );
 
   const shot = await screenshot(browser);
   const seen = await validate(shot, [
-    "A quick-add section headed From your workspace suite shows Google Workspace and Microsoft 365 tiles",
-    "No Telegram tile or Telegram wording appears anywhere on the page",
+    "A connector catalog with a Popular section lists Gmail, Google Drive, and Google Calendar rows and a More connectors section includes Microsoft 365",
+    "No Telegram row or Telegram wording appears anywhere on the page",
   ]);
   expect(seen.ok, seen.why).toBe(true);
 });

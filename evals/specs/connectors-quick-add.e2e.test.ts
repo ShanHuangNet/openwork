@@ -13,7 +13,7 @@ const requirements: TestNeeds = {
 const missingRequirements = unmetNeeds(requirements, process.env);
 const title = missingRequirements.length > 0
   ? `connectors quick add skipped — needs: ${missingRequirements.join(", ")}`
-  : "an admin can find, resolve, and add a connector from the unified quick-add bar";
+  : "an admin lands on popular connectors, resolves a pasted MCP URL, and finds the new connection under Configured";
 
 const smartBarSelector = '[data-testid="connector-smart-bar"]';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -75,20 +75,18 @@ test(title, async ({ evidence, place }) => {
 
   await navigate(browser.client, `${den.ref.webUrl}/dashboard/mcp-connections`);
   await waitFor(browser, `(() => {
-    const groupHeaders = [...document.querySelectorAll("h4")].map((entry) => (entry.textContent ?? "").trim());
+    const popularRows = document.querySelectorAll('[data-testid="popular-connectors"] [data-testid^="connector-row-"]');
     return location.pathname === "/dashboard/mcp-connections"
       && Boolean(document.querySelector('[data-testid="connector-smart-bar"]'))
-      && Boolean(document.querySelector('[data-testid="connector-quick-add-grid"]'))
-      && groupHeaders.includes("From your workspace suite")
-      && groupHeaders.includes("MCP servers")
-      && document.querySelectorAll('[data-testid^="quick-add-preset-"]').length === 10
-      && (document.querySelector('[data-testid="quick-add-preset-slack"]')?.textContent ?? "").includes("OAuth app required")
-      && (document.querySelector('[data-testid="quick-add-preset-exa"]')?.textContent ?? "").includes("API key")
-      && (document.querySelector('[data-testid="quick-add-preset-context7"]')?.textContent ?? "").includes("Instant")
-      && (document.querySelector('[data-testid="quick-add-preset-notion"]')?.textContent ?? "").includes("One-click");
+      && Boolean(document.querySelector('[data-testid="connector-catalog"]'))
+      && Boolean(document.querySelector('[data-testid="configured-connectors-link"]'))
+      && popularRows.length === 6
+      && Boolean(document.querySelector('[data-testid="connector-add-github"]'))
+      && document.querySelector('[data-testid="connector-catalog-more"]') instanceof HTMLButtonElement
+      && !document.querySelector('[data-testid="more-connectors"]');
   })()`, {
     timeoutMs: 60_000,
-    label: "full connectors quick-add bar, groups, and preset effort badges",
+    label: "connector catalog: smart bar, Configured link, six popular rows, collapsed More",
   });
 
   const smartBarPresent = await evalIn(browser, `Boolean(document.querySelector('[data-testid="connector-smart-bar"]'))`);
@@ -102,31 +100,50 @@ test(title, async ({ evidence, place }) => {
     smartBarPresent === true && standaloneAddMcpMissing === true,
   );
 
-  const fullPresetCount = await evalIn(browser, `document.querySelectorAll('[data-testid^="quick-add-preset-"]').length`);
-  const bothGroupHeaders = await evalIn(browser, `(() => {
-    const headers = [...document.querySelectorAll("h4")].map((entry) => (entry.textContent ?? "").trim());
-    return headers.includes("From your workspace suite") && headers.includes("MCP servers");
+  const popularOrder = await evalIn(browser, `[...document.querySelectorAll('[data-testid="popular-connectors"] [data-testid^="connector-row-"]')]
+    .map((row) => row.getAttribute("data-testid").replace("connector-row-", ""))`);
+  const configuredListBeforeAdd = await evalIn(browser, `(() => {
+    const strip = document.querySelector('[data-testid="configured-connector-strip"]');
+    return {
+      present: Boolean(strip),
+      rows: document.querySelectorAll('[data-testid^="mcp-connection-row-"]').length,
+      links: strip ? strip.querySelectorAll('a[href*="connectionId="]').length : -1,
+    };
   })()`);
-  expect(fullPresetCount).toBe(10);
-  expect(bothGroupHeaders).toBe(true);
+  expect(popularOrder).toEqual(["gmail", "github", "google-drive", "google-calendar", "notion", "slack"]);
+  expect(configuredListBeforeAdd).toEqual({ present: true, rows: 0, links: 0 });
   evidence.recordAssertionEvidence(
-    "Quick add separates the workspace suite from all ten MCP server presets",
-    `Both group headers present: ${String(bothGroupHeaders)}; MCP preset tiles: ${String(fullPresetCount)}.`,
-    bothGroupHeaders === true && fullPresetCount === 10,
+    "Popular lists Gmail, GitHub, Google Drive, Google Calendar, Notion, and Slack ahead of the configured list, which lives on its own page",
+    `Popular order: ${JSON.stringify(popularOrder)}; configured strip state: ${JSON.stringify(configuredListBeforeAdd)}.`,
+    Array.isArray(popularOrder) && popularOrder.length === 6,
   );
 
-  const effortBadgesMatch = await evalIn(browser, `(() => {
-    const text = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.textContent ?? "";
-    return text("quick-add-preset-slack").includes("OAuth app required")
-      && text("quick-add-preset-exa").includes("API key")
-      && text("quick-add-preset-context7").includes("Instant")
-      && text("quick-add-preset-notion").includes("One-click");
+  const expandedMore = await evalIn(browser, `(() => {
+    const more = document.querySelector('[data-testid="connector-catalog-more"]');
+    if (!(more instanceof HTMLButtonElement) || !(more.textContent ?? "").includes("See Outlook Email, Granola, and more")) return false;
+    more.click();
+    return true;
   })()`);
-  expect(effortBadgesMatch).toBe(true);
+  expect(expandedMore).toBe(true);
+  await waitFor(browser, `(() => {
+    const more = document.querySelector('[data-testid="more-connectors"]');
+    return Boolean(more)
+      && Boolean(more.querySelector('[data-testid="connector-row-microsoft-365"]'))
+      && more.querySelectorAll('[data-testid^="connector-row-"]').length === 9
+      && Boolean(document.querySelector('[data-testid="connector-add-context7"]'))
+      && Boolean(document.querySelector('[data-testid="connector-add-exa"]'))
+      && !document.querySelector('[data-testid="connector-catalog-more"]');
+  })()`, {
+    timeoutMs: 20_000,
+    label: "More connectors: Microsoft 365 plus the eight remaining curated MCP presets",
+  });
+  const moreRows = await evalIn(browser, `[...document.querySelectorAll('[data-testid="more-connectors"] [data-testid^="connector-row-"]')]
+    .map((row) => row.getAttribute("data-testid").replace("connector-row-", ""))`);
+  expect(moreRows).toEqual(["microsoft-365", "linear", "stripe", "sentry", "granola", "polar", "exa", "render", "context7"]);
   evidence.recordAssertionEvidence(
-    "Preset tiles disclose OAuth-app, API-key, instant, and one-click setup effort",
-    "Slack showed OAuth app required; Exa showed API key; Context7 showed Instant; Notion showed One-click.",
-    effortBadgesMatch === true,
+    "See Outlook Email, Granola, and more reveals Microsoft 365 and every curated MCP preset not already in Popular",
+    `More rows: ${JSON.stringify(moreRows)}.`,
+    Array.isArray(moreRows) && moreRows.length === 9,
   );
   // Context7's Instant mechanism is covered without clicking it here: doing so
   // would contact the real mcp.context7.com rather than this spec's witness.
@@ -135,9 +152,10 @@ test(title, async ({ evidence, place }) => {
   {
     const shot = await screenshot(browser);
     const seen = await validate(shot, [
-      "The Connectors page shows one smart search-or-paste bar above grouped quick-add tiles",
-      "Workspace suite and MCP server group headings are visible",
-      "Setup-effort pills including OAuth app required, API key, One-click, and Instant are readable on tiles",
+      "The Connectors page shows one smart search-or-paste bar with a round plus button beside it",
+      "A Configured heading with a chevron sits above a Popular section of two-column rows with icons, names, descriptions, and plus buttons",
+      "Rows include Gmail, GitHub, Google Drive, Google Calendar, Notion, and Slack",
+      "A More connectors section lists Microsoft 365 and additional MCP servers",
       "No standalone Add MCP button or error banner is visible",
     ]);
     expect(seen.ok, seen.why).toBe(true);
@@ -145,29 +163,31 @@ test(title, async ({ evidence, place }) => {
 
   await replaceSmartBarText(browser, "sla");
   await waitFor(browser, `(() => {
-    const presets = document.querySelectorAll('[data-testid^="quick-add-preset-"]');
-    return presets.length === 1
-      && Boolean(document.querySelector('[data-testid="quick-add-preset-slack"]'))
-      && !document.querySelector('[data-testid="quick-add-preset-notion"]');
+    const rows = document.querySelectorAll('[data-testid^="connector-row-"]');
+    return rows.length === 1
+      && Boolean(document.querySelector('[data-testid="connector-row-slack"]'))
+      && !document.querySelector('[data-testid="connector-row-notion"]')
+      && !document.querySelector('[data-testid="configured-connector-strip"]');
   })()`, {
     timeoutMs: 20_000,
-    label: "live Slack-only quick-add filter with Notion absent",
+    label: "live Slack-only catalog filter with Notion and the Configured strip absent",
   });
-  const slackOnly = await evalIn(browser, `document.querySelectorAll('[data-testid^="quick-add-preset-"]').length === 1
-    && Boolean(document.querySelector('[data-testid="quick-add-preset-slack"]'))`);
-  const notionAbsent = await evalIn(browser, `!document.querySelector('[data-testid="quick-add-preset-notion"]')`);
+  const slackOnly = await evalIn(browser, `document.querySelectorAll('[data-testid^="connector-row-"]').length === 1
+    && Boolean(document.querySelector('[data-testid="connector-row-slack"]'))`);
+  const notionAbsent = await evalIn(browser, `!document.querySelector('[data-testid="connector-row-notion"]')`);
   expect(slackOnly).toBe(true);
   expect(notionAbsent).toBe(true);
   evidence.recordAssertionEvidence(
-    "Typing sla narrows the live grid to Slack and removes Notion",
-    `Slack was the only preset tile: ${String(slackOnly)}; Notion absent: ${String(notionAbsent)}.`,
+    "Typing sla narrows the catalog to Slack and removes Notion",
+    `Slack was the only row: ${String(slackOnly)}; Notion absent: ${String(notionAbsent)}.`,
     slackOnly === true && notionAbsent === true,
   );
 
   await replaceSmartBarText(browser, "");
-  await waitFor(browser, `document.querySelectorAll('[data-testid^="quick-add-preset-"]').length === 10`, {
+  await waitFor(browser, `document.querySelectorAll('[data-testid="popular-connectors"] [data-testid^="connector-row-"]').length === 6
+    && Boolean(document.querySelector('[data-testid="configured-connector-strip"]'))`, {
     timeoutMs: 20_000,
-    label: "full preset grid after clearing the smart bar",
+    label: "full popular list and Configured strip after clearing the smart bar",
   });
 
   const witnessStartedAt = new Date().toISOString();
@@ -207,7 +227,7 @@ test(title, async ({ evidence, place }) => {
     const seen = await validate(shot, [
       "An inline card directly below the smart bar shows the resolved mock MCP server",
       "The card shows OAuth sign-in and Ready to add pills with Options and Add connection actions",
-      "The quick-add tiles remain visible below the inline result instead of being replaced by a modal",
+      "The connector catalog rows remain visible below the inline result instead of being replaced by a modal",
       "No error banner or modal covers the page",
     ]);
     expect(seen.ok, seen.why).toBe(true);
@@ -221,34 +241,79 @@ test(title, async ({ evidence, place }) => {
   })()`);
   expect(submitted).toBe(true);
   await waitFor(browser, `(() => {
-    const row = [...document.querySelectorAll('[data-testid^="mcp-connection-row-"]')]
-      .find((entry) => (entry.textContent ?? "").includes(${JSON.stringify(connector.mcpUrl)}));
+    const strip = document.querySelector('[data-testid="configured-connector-strip"]');
     const notice = [...document.querySelectorAll('[role="status"]')]
       .find((entry) => (entry.textContent ?? "").includes("added for everyone"));
-    return Boolean(row && notice)
-      && document.querySelectorAll('[data-testid^="quick-add-preset-"]').length === 10;
+    return Boolean(strip && notice)
+      && strip.querySelectorAll('a[href*="connectionId="]').length === 1
+      && document.querySelectorAll('[data-testid="popular-connectors"] [data-testid^="connector-row-"]').length === 6
+      && document.querySelectorAll('[data-testid^="mcp-connection-row-"]').length === 0;
   })()`, {
     timeoutMs: 60_000,
-    label: "created mock connection row, success notice, and restored ten-preset grid",
+    label: "success notice, one Configured strip icon, unchanged popular rows, and no inline connection list",
   });
 
+  const configuredHref = await evalIn(browser, `document.querySelector('[data-testid="configured-connector-strip"] a[href*="connectionId="]')?.getAttribute("href") ?? ""`);
+  const popularAfterAdd = await evalIn(browser, `document.querySelectorAll('[data-testid="popular-connectors"] [data-testid^="connector-row-"]').length`);
+  expect(typeof configuredHref).toBe("string");
+  expect(configuredHref).toMatch(/^\/dashboard\/mcp-connections\/configured\?connectionId=/);
+  expect(popularAfterAdd).toBe(6);
+  // This mock connection uses a custom URL, so no popular row should flip to
+  // its options menu. Configured/options row mechanics have focused Bun
+  // coverage; this app spec scopes the frame to the strip plus the popular list.
+  evidence.recordAssertionEvidence(
+    "Add connection puts the new connection in the Configured strip without disturbing the popular rows",
+    `Configured strip link: ${String(configuredHref)}; popular rows: ${String(popularAfterAdd)}.`,
+    typeof configuredHref === "string"
+      && configuredHref.startsWith("/dashboard/mcp-connections/configured?connectionId=")
+      && popularAfterAdd === 6,
+  );
+
+  await navigate(browser.client, `${den.ref.webUrl}${String(configuredHref)}`);
+  await waitFor(browser, `(() => {
+    const row = [...document.querySelectorAll('[data-testid^="mcp-connection-row-"]')]
+      .find((entry) => (entry.textContent ?? "").includes(${JSON.stringify(connector.mcpUrl)}));
+    return location.pathname === "/dashboard/mcp-connections/configured"
+      && Boolean(row)
+      && Boolean(document.querySelector('[data-testid="configured-add-connector"]'))
+      && !document.querySelector('[data-testid="connector-catalog"]');
+  })()`, {
+    timeoutMs: 60_000,
+    label: "configured page with the created mock connection row and no catalog",
+  });
   const createdRowTestId = await evalIn(browser, `([...document.querySelectorAll('[data-testid^="mcp-connection-row-"]')]
     .find((entry) => (entry.textContent ?? "").includes(${JSON.stringify(connector.mcpUrl)})))
     ?.getAttribute("data-testid") ?? ""`);
-  const restoredPresetCount = await evalIn(browser, `document.querySelectorAll('[data-testid^="quick-add-preset-"]').length`);
-  expect(typeof createdRowTestId).toBe("string");
+  const chatActionPresent = await evalIn(browser, `(() => {
+    const row = [...document.querySelectorAll('[data-testid^="mcp-connection-row-"]')]
+      .find((entry) => (entry.textContent ?? "").includes(${JSON.stringify(connector.mcpUrl)}));
+    const more = row?.querySelector('[data-testid^="mcp-connection-more-"]');
+    if (!(more instanceof HTMLButtonElement)) return false;
+    more.click();
+    const chat = row?.querySelector('[data-testid^="chat-mcp-connection-"]');
+    return chat instanceof HTMLAnchorElement && chat.getAttribute("href")?.startsWith("openwork://chat?") === true;
+  })()`);
   expect(createdRowTestId).toMatch(/^mcp-connection-row-/);
-  expect(restoredPresetCount).toBe(10);
-  // This mock connection uses a custom URL, so no curated tile should flip to
-  // Added. The Added/Manage tile mechanism has focused Bun coverage; this app
-  // spec scopes frame 6 to the real row plus the unaffected ten-preset grid.
+  expect(chatActionPresent).toBe(true);
   evidence.recordAssertionEvidence(
-    "Add connection creates a row in Your connectors without disturbing the preset grid",
-    `Created row test id: ${String(createdRowTestId)}; remaining preset tiles: ${String(restoredPresetCount)}.`,
+    "The Configured page owns the connection row, offers Add connector, and its menu carries a Chat deep link into the desktop app",
+    `Created row test id: ${String(createdRowTestId)}; Chat deep link present: ${String(chatActionPresent)}.`,
     typeof createdRowTestId === "string"
       && createdRowTestId.startsWith("mcp-connection-row-")
-      && restoredPresetCount === 10,
+      && chatActionPresent === true,
   );
+
+  await sleep(500);
+  {
+    const shot = await screenshot(browser);
+    const seen = await validate(shot, [
+      "A Configured connectors page lists the newly added MCP connection as a row",
+      "An Add connector button sits above the list",
+      "An open row menu shows Chat, Edit, View tools, and Remove",
+      "No catalog of popular connectors is on this page",
+    ]);
+    expect(seen.ok, seen.why).toBe(true);
+  }
 
   const handshakes = await connector.handshakes({
     sinceIso: witnessStartedAt,
