@@ -95,6 +95,23 @@
       ]
     },
     {
+      "id": "den.desktop-policies",
+      "description": "Organization desktop policies: the shared policy catalog, effective-policy calculation, Den policy editor, and desktop enforcement of the browser URL allowlist",
+      "implementation": [
+        "apps/app/src/react-app/domains/cloud/desktop-config-provider.tsx",
+        "apps/desktop/electron/browser-panel.mjs",
+        "apps/desktop/electron/browser-url-policy.mjs",
+        "ee/apps/den-api/src/desktop-policies.ts",
+        "ee/apps/den-api/src/routes/org/desktop-policies.ts",
+        "ee/apps/den-web/app/(den)/dashboard/_components/desktop-policy-data.tsx",
+        "ee/apps/den-web/app/(den)/dashboard/_components/desktop-policy-editor-screen.tsx",
+        "packages/types/src/den/desktop-policies.ts"
+      ],
+      "specs": [
+        "evals/specs/browser-url-allowlist-policy.e2e.test.ts"
+      ]
+    },
+    {
       "id": "den.install-bootstrap",
       "description": "Enterprise bootstrap, invitations, install links, downloads, and first-run deployment setup",
       "implementation": [
