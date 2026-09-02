@@ -7,6 +7,10 @@ import {
   type OpenworkMcpAppResource,
 } from "../src/app/lib/openwork-server"
 import {
+  MCP_APP_RESOLUTION_RETRY_DELAYS_MS,
+  mcpAppResolutionRetryDelayMs,
+} from "../src/app/lib/mcp-app-resolution"
+import {
   formatMcpAppDiagnostic,
   mcpAppDiagnosticGuidance,
   safeMcpAppDiagnosticMessage,
@@ -15,8 +19,6 @@ import {
   buildMcpAppCsp,
   gatewayMcpAppLaunch,
   isActionableMcpAppResolutionError,
-  MCP_APP_RESOLUTION_RETRY_DELAYS_MS,
-  mcpAppResolutionRetryDelayMs,
   secureMcpAppHtml,
 } from "../src/components/chat/mcp-app-frame"
 
@@ -87,7 +89,7 @@ describe("MCP App iframe policy", () => {
   })
 
   test("keeps ordinary tools silent while surfacing advertised resource failures", () => {
-    expect(isActionableMcpAppResolutionError(new OpenworkServerError(503, "mcp_unreachable", "offline"))).toBe(false)
+    expect(isActionableMcpAppResolutionError(new OpenworkServerError(503, "mcp_unreachable", "offline"))).toBe(true)
     expect(isActionableMcpAppResolutionError(new OpenworkServerError(404, "resource_read_failed", "missing"))).toBe(true)
     expect(isActionableMcpAppResolutionError(new Error("generic failure"))).toBe(false)
   })
