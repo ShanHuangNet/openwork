@@ -20,6 +20,7 @@ app-smoke.e2e.test.ts
 artifact-code-browser.e2e.test.ts
 attachment-upload-loading-state.e2e.test.ts
 automation-revision-revert.e2e.test.ts
+automation-runtime-placement.e2e.test.ts
 chat-loading-shimmer.e2e.test.ts
 cloud-provider-local-credential-fallback.e2e.test.ts
 cloud-provider-sync-contract.e2e.test.ts
@@ -34,6 +35,7 @@ cross-workspace-split-view.e2e.test.ts
 den-behind-enterprise-tls.e2e.test.ts
 first-run-cloud-share.e2e.test.ts
 first-run-local.e2e.test.ts
+generated-artifact-views.e2e.test.ts
 library-add-connector-discovery.e2e.test.ts
 library-signed-in-render-stability.e2e.test.ts
 live-tool-visible-after-session-switch.e2e.test.ts
