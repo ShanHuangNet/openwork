@@ -271,12 +271,13 @@
     },
     {
       "id": "desktop.chat-composer",
-      "description": "Desktop chat rendering, composer drafts, queued sends, attachments, and resend behavior",
+      "description": "Desktop chat rendering, composer drafts, local voice input, queued sends, attachments, and resend behavior",
       "implementation": [
         "apps/app/src/components/chat/**",
         "apps/app/src/react-app/domains/session/chat/**",
         "apps/app/src/react-app/domains/session/surface/**",
-        "apps/app/src/react-app/domains/session/sync/**"
+        "apps/app/src/react-app/domains/session/sync/**",
+        "apps/desktop/electron/local-speech.mjs"
       ],
       "specs": [
         "evals/specs/attachment-upload-loading-state.e2e.test.ts",
@@ -288,6 +289,7 @@
         "evals/specs/composer-queued-follow-ups-sequential.e2e.test.ts",
         "evals/specs/cross-workspace-composer-switch.e2e.test.ts",
         "evals/specs/image-lightbox-size.e2e.test.ts",
+        "evals/specs/local-voice-transcription.test.ts",
         "evals/specs/safe-edit-resend.e2e.test.ts",
         "evals/specs/session-header-workspace-name.e2e.test.ts",
         "evals/specs/unfinished-tool-lifecycle.e2e.test.ts"
