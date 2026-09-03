@@ -32,10 +32,20 @@ export type ConnectorCatalogProps = {
   onAddPopular: (connector: PopularConnector) => void;
   onAddPreset: (preset: ExternalMcpPreset) => void;
   onAddMicrosoft365: () => void;
+  onConnect: (connection: ExternalMcpConnection) => void;
   onManage: (connection: ExternalMcpConnection) => void;
   onRemove: (connection: ExternalMcpConnection) => void;
   addingPresetId: string | null;
+  connectingConnectionId: string | null;
 };
+
+/** A published per-person connection the caller has not signed in to yet. */
+export function connectionNeedsMyConnect(connection: ExternalMcpConnection): boolean {
+  return connection.authType === "oauth"
+    && connection.credentialMode === "per_member"
+    && !connection.connectedForMe
+    && connection.setupRequired !== true;
+}
 
 /**
  * ConnectorChatLink
@@ -157,7 +167,9 @@ function CatalogRow({
   icon,
   connection,
   adding,
+  connecting,
   onAdd,
+  onConnect,
   onManage,
   onRemove,
 }: {
@@ -167,10 +179,15 @@ function CatalogRow({
   icon: CatalogRowIcon;
   connection: ExternalMcpConnection | undefined;
   adding: boolean;
+  connecting: boolean;
   onAdd: () => void;
+  onConnect: (connection: ExternalMcpConnection) => void;
   onManage: (connection: ExternalMcpConnection) => void;
   onRemove: (connection: ExternalMcpConnection) => void;
 }) {
+  // Published for everyone but this person has not signed in yet: the row's
+  // primary action is their own Connect, exactly like Your Connections.
+  const needsMyConnect = connection !== undefined && connectionNeedsMyConnect(connection);
   return (
     <div className="flex items-center gap-3.5 py-2" data-testid={`connector-row-${id}`}>
       <IntegrationIcon
@@ -186,12 +203,25 @@ function CatalogRow({
         <p className="truncate text-[13px] leading-5 text-gray-500" title={description}>{description}</p>
       </div>
       {connection ? (
-        <RowMenu
-          name={name}
-          connection={connection}
-          onManage={() => onManage(connection)}
-          onRemove={() => onRemove(connection)}
-        />
+        <>
+          {needsMyConnect ? (
+            <button
+              type="button"
+              onClick={() => onConnect(connection)}
+              disabled={connecting}
+              className="flex h-8 items-center rounded-full bg-gray-900 px-3.5 text-[13px] font-medium text-white transition hover:bg-black disabled:cursor-wait disabled:opacity-60"
+              data-testid={`connector-connect-${id}`}
+            >
+              {connecting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : "Connect"}
+            </button>
+          ) : null}
+          <RowMenu
+            name={name}
+            connection={connection}
+            onManage={() => onManage(connection)}
+            onRemove={() => onRemove(connection)}
+          />
+        </>
       ) : (
         <button
           type="button"
@@ -277,9 +307,11 @@ export function ConnectorCatalog({
   onAddPopular,
   onAddPreset,
   onAddMicrosoft365,
+  onConnect,
   onManage,
   onRemove,
   addingPresetId,
+  connectingConnectionId,
 }: ConnectorCatalogProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const filtering = filter.trim().length > 0;
@@ -318,7 +350,9 @@ export function ConnectorCatalog({
                   icon={connector.icon}
                   connection={connection}
                   adding={adding}
+                  connecting={connectingConnectionId === connection?.id}
                   onAdd={() => onAddPopular(connector)}
+                  onConnect={onConnect}
                   onManage={onManage}
                   onRemove={onRemove}
                 />
@@ -355,25 +389,32 @@ export function ConnectorCatalog({
                 icon={{ simpleIconSlug: "microsoft" }}
                 connection={microsoftConnection}
                 adding={false}
+                connecting={connectingConnectionId === microsoftConnection?.id}
                 onAdd={onAddMicrosoft365}
+                onConnect={onConnect}
                 onManage={onManage}
                 onRemove={onRemove}
               />
             ) : null}
-            {more.map((preset) => (
-              <CatalogRow
-                key={preset.presetId}
-                id={preset.presetId}
-                name={preset.displayName}
-                description={preset.description}
-                icon={{ serviceUrl: preset.url }}
-                connection={connectionForPresetUrl(connections, preset.url)}
-                adding={addingPresetId === preset.presetId}
-                onAdd={() => onAddPreset(preset)}
-                onManage={onManage}
-                onRemove={onRemove}
-              />
-            ))}
+            {more.map((preset) => {
+              const presetConnection = connectionForPresetUrl(connections, preset.url);
+              return (
+                <CatalogRow
+                  key={preset.presetId}
+                  id={preset.presetId}
+                  name={preset.displayName}
+                  description={preset.description}
+                  icon={{ serviceUrl: preset.url }}
+                  connection={presetConnection}
+                  adding={addingPresetId === preset.presetId}
+                  connecting={connectingConnectionId === presetConnection?.id}
+                  onAdd={() => onAddPreset(preset)}
+                  onConnect={onConnect}
+                  onManage={onManage}
+                  onRemove={onRemove}
+                />
+              );
+            })}
           </div>
         </section>
       ) : null}
