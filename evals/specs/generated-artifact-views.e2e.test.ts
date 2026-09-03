@@ -1,6 +1,6 @@
 import { expect } from "vitest"
 import { needs, server, test } from "@openwork/testkit"
-import { denFetch, evalIn, waitFor } from "@openwork/behaviors"
+import { createCloudAutomation, denFetch, evalIn, waitFor } from "@openwork/behaviors"
 import type { DenSession } from "@openwork/behaviors"
 import { navigate } from "@openwork/cdp"
 import { chrome } from "@openwork/hosts"
@@ -236,21 +236,14 @@ test("the agent MCP exposes the custom Artifact view authoring lifecycle", { tim
 
   // Read access is not run access: a viewer must not schedule the Workflow
   // through a pinned Cloud Automation, which would execute it on their behalf.
-  const viewerSchedule = await denFetch(viewer, "/v1/cloud-automations", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${viewer.token}`,
-      "x-openwork-org-id": organizationId,
+  const viewerSchedule = await createCloudAutomation(viewer, organizationId, {
+    name: "Viewer schedule attempt",
+    schedule: { kind: "daily", timezone: "UTC", hour: 23, minute: 59 },
+    action: {
+      kind: "saved_script",
+      script: { pluginId: String(saved.pluginId ?? ""), configObjectId, configObjectVersionId: String(viewerVersion.id ?? "") },
+      input: { preview: "viewer" },
     },
-    body: JSON.stringify({
-      name: "Viewer schedule attempt",
-      schedule: { kind: "daily", timezone: "UTC", hour: 23, minute: 59 },
-      action: {
-        kind: "saved_script",
-        script: { pluginId: String(saved.pluginId ?? ""), configObjectId, configObjectVersionId: String(viewerVersion.id ?? "") },
-        input: { preview: "viewer" },
-      },
-    }),
   })
   expect(viewerSchedule.response.ok, viewerSchedule.text).toBe(false)
   expect(viewerSchedule.text).toContain("automation_saved_script_forbidden")

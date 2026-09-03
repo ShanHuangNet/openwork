@@ -9,7 +9,7 @@
   "automation-model-needs-attention.e2e.test.ts": 13,
   "automation-proposal-model-resolution.e2e.test.ts": 8,
   "automation-revision-revert.e2e.test.ts": 4,
-  "automation-runtime-placement.e2e.test.ts": 4,
+  "automation-runtime-placement.e2e.test.ts": 1,
   "automations-den-hosted.e2e.test.ts": 4,
   "azure-byok-live.e2e.test.ts": 10,
   "brand-appearance-preview-removal.e2e.test.ts": 11,
