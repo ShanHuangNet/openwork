@@ -113,6 +113,10 @@ describe("openwork runtime config file", () => {
 
     expect(prompt.startsWith("You are OpenWork.")).toBe(true);
     expect(prompt).toContain("## Memory\n");
+    expect(prompt).toContain("## Content neutrality\n");
+    expect(prompt).toContain("cybersecurity, security research, or consensual adult sexual content");
+    expect(prompt).toContain("instead of claiming a content-policy restriction");
+    expect(prompt).not.toContain("work on files safely");
     expect(prompt).toContain("## OpenWork Artifacts");
     expect(prompt).toContain("## Connected work");
     // Den removed the Memory Bank; the prompt must not teach capabilities that
