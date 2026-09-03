@@ -234,6 +234,32 @@ test("the agent MCP exposes the custom Artifact view authoring lifecycle", { tim
   expect(JSON.stringify(viewerGenericVersion)).not.toContain("private-preview-value")
   expect(JSON.stringify(viewerGenericVersion)).not.toContain(code)
 
+  // Read access is not run access: a viewer must not schedule the Workflow
+  // through a pinned Cloud Automation, which would execute it on their behalf.
+  const viewerSchedule = await denFetch(viewer, "/v1/cloud-automations", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${viewer.token}`,
+      "x-openwork-org-id": organizationId,
+    },
+    body: JSON.stringify({
+      name: "Viewer schedule attempt",
+      schedule: { kind: "daily", timezone: "UTC", hour: 23, minute: 59 },
+      action: {
+        kind: "saved_script",
+        script: { pluginId: String(saved.pluginId ?? ""), configObjectId, configObjectVersionId: String(viewerVersion.id ?? "") },
+        input: { preview: "viewer" },
+      },
+    }),
+  })
+  expect(viewerSchedule.response.ok, viewerSchedule.text).toBe(false)
+  expect(viewerSchedule.text).toContain("automation_saved_script_forbidden")
+  evidence.recordAssertionEvidence(
+    "Workflow viewers cannot schedule execution",
+    "A member with viewer access reads the Workflow but Den refuses to create a pinned Cloud Automation for it.",
+    true,
+  )
+
   const library = await denFetch(den.admin, "/v1/me/library", {
     headers: { authorization: `Bearer ${den.admin.token}` },
   })
