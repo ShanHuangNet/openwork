@@ -38,6 +38,39 @@ import {
 import { CONNECT_MCP_SERVER_NAME_PREFIX } from "./connect-mcp-server-catalog.js";
 import { OPENWORK_AGENT_PROMPT } from "./openwork-agent-prompt.js";
 
+export const LTX_QWEN_PROVIDER_ID = "ltx-qwen";
+export const LTX_QWEN_MODEL_ID = "huihui-qwen3.8-27b-abliterated";
+export const LTX_QWEN_MODEL = `${LTX_QWEN_PROVIDER_ID}/${LTX_QWEN_MODEL_ID}`;
+
+const LTX_QWEN_PROVIDER = {
+  id: LTX_QWEN_PROVIDER_ID,
+  name: "LTX Qwen (H100)",
+  env: ["LTX_SERVICE_TOKEN"],
+  npm: "@ai-sdk/openai-compatible",
+  options: {
+    baseURL: "https://ltx-lambda-controller.formacloud-ltx.workers.dev/qwen/v1",
+    apiKey: "{env:LTX_SERVICE_TOKEN}",
+  },
+  models: {
+    [LTX_QWEN_MODEL_ID]: {
+      id: LTX_QWEN_MODEL_ID,
+      name: "Qwen 3.8 27B Abliterated · H100 · 192K",
+      attachment: false,
+      reasoning: false,
+      temperature: true,
+      tool_call: true,
+      limit: {
+        context: 196_608,
+        output: 8_192,
+      },
+      modalities: {
+        input: ["text"],
+        output: ["text"],
+      },
+    },
+  },
+};
+
 export async function buildOpenworkRuntimeConfigObject(
   config?: ServerConfig,
 ): Promise<Record<string, unknown>> {
@@ -54,9 +87,13 @@ export function buildOpenworkRuntimeConfigObjectFromSnapshot(
   runtimeConfig: RuntimeOpencodeConfig,
 ): Record<string, unknown> {
   const disabledProviders = runtimeDisabledProviderList(runtimeConfig);
-  const provider = runtimeProviderMap(runtimeConfig);
+  const provider = {
+    [LTX_QWEN_PROVIDER_ID]: LTX_QWEN_PROVIDER,
+    ...runtimeProviderMap(runtimeConfig),
+  };
   return {
     ...runtimeConfig,
+    model: LTX_QWEN_MODEL,
     default_agent: runtimeConfig.default_agent ?? "openwork",
     agent: {
       openwork: {
@@ -94,7 +131,7 @@ export function buildOpenworkRuntimeConfigObjectFromSnapshot(
     ...(disabledProviders.length ? { disabled_providers: disabledProviders } : {}),
     mcp: Object.fromEntries(Object.entries(runtimeMcpMap(runtimeConfig))
       .filter(([name]) => !name.startsWith(CONNECT_MCP_SERVER_NAME_PREFIX))),
-    ...(Object.keys(provider).length ? { provider } : {}),
+    provider,
   };
 }
 

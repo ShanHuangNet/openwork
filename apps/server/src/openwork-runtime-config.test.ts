@@ -6,6 +6,9 @@ import { join } from "node:path";
 import {
   buildOpenworkRuntimeConfig,
   keepOpenworkRuntimeConfigFileFresh,
+  LTX_QWEN_MODEL,
+  LTX_QWEN_MODEL_ID,
+  LTX_QWEN_PROVIDER_ID,
   openworkRuntimeConfigFilePath,
   writeOpenworkRuntimeConfigFile,
 } from "./openwork-runtime-config.js";
@@ -73,6 +76,7 @@ describe("openwork runtime config file", () => {
     expect(mcp.posthog?.enabled).toBe(true);
     expect(mcp["openwork-connect-stale"]).toBeUndefined();
     expect(parsed.default_agent).toBe("openwork");
+    expect(parsed.model).toBe(LTX_QWEN_MODEL);
     expect(Array.isArray(parsed.plugin)).toBe(true);
     expect(parsed.agent).toMatchObject({
       openwork: {
@@ -87,6 +91,34 @@ describe("openwork runtime config file", () => {
         },
       },
     });
+  });
+
+  test("injects the private H100 Qwen provider without embedding its credential", async () => {
+    const { config } = await setup();
+    await writeOpenworkRuntimeConfigFile(config);
+
+    const parsed = await readConfigFile(config);
+    const providers = parsed.provider as Record<string, Record<string, unknown>>;
+    const qwen = providers[LTX_QWEN_PROVIDER_ID];
+
+    expect(qwen).toMatchObject({
+      id: LTX_QWEN_PROVIDER_ID,
+      name: "LTX Qwen (H100)",
+      env: ["LTX_SERVICE_TOKEN"],
+      npm: "@ai-sdk/openai-compatible",
+      options: {
+        baseURL: "https://ltx-lambda-controller.formacloud-ltx.workers.dev/qwen/v1",
+        apiKey: "{env:LTX_SERVICE_TOKEN}",
+      },
+      models: {
+        [LTX_QWEN_MODEL_ID]: {
+          id: LTX_QWEN_MODEL_ID,
+          tool_call: true,
+          limit: { context: 196_608, output: 8_192 },
+        },
+      },
+    });
+    expect(JSON.stringify(parsed)).not.toContain("Bearer ");
   });
 
   test("workspace runtime rows never reach the injected file", async () => {
